@@ -25,7 +25,6 @@ if GEMINI_API_KEY:
 #  1. PDF TEXT EXTRACTION
 # ================================================================
 def extract_text(file) -> str:
-    """Extract plain text from an uploaded PDF file."""
     try:
         pdf = fitz.open(stream=file.read(), filetype="pdf")
         return "".join(page.get_text() for page in pdf)
@@ -44,17 +43,9 @@ def clean_text(text: str) -> str:
 
 
 # ================================================================
-#  3. DYNAMIC KEYWORD EXTRACTION  (replaces hardcoded skill list)
-#     Uses TF-IDF on the JD to find its most important terms,
-#     then checks which ones appear in the resume.
+#  3. DYNAMIC KEYWORD EXTRACTION
 # ================================================================
 def dynamic_keyword_score(resume: str, job_desc: str):
-    """
-    Returns:
-        score       - 0-100 based on % of JD keywords found in resume
-        matched     - keywords found in both
-        missing     - important JD keywords absent from resume
-    """
     try:
         vectorizer = TfidfVectorizer(
             stop_words="english",
@@ -66,7 +57,6 @@ def dynamic_keyword_score(resume: str, job_desc: str):
         feature_names = vectorizer.get_feature_names_out()
         jd_vector     = vectorizer.transform([job_desc]).toarray()[0]
 
-        # Pick top-30 terms by TF-IDF weight in the JD
         top_indices  = jd_vector.argsort()[::-1][:30]
         top_keywords = [feature_names[i] for i in top_indices if jd_vector[i] > 0]
 
@@ -83,7 +73,7 @@ def dynamic_keyword_score(resume: str, job_desc: str):
 
 
 # ================================================================
-#  4. TF-IDF COSINE SIMILARITY  (baseline overlap score)
+#  4. TF-IDF COSINE SIMILARITY
 # ================================================================
 def tfidf_score(resume: str, job_desc: str) -> float:
     try:
@@ -98,7 +88,6 @@ def tfidf_score(resume: str, job_desc: str) -> float:
 #  5. SECTION DETECTION
 # ================================================================
 def section_score(resume: str):
-    """Returns score + list of detected sections."""
     sections = ["education", "skills", "projects", "experience",
                 "summary", "certifications", "achievements"]
     resume_lower = resume.lower()
@@ -108,7 +97,7 @@ def section_score(resume: str):
 
 
 # ================================================================
-#  6. GEMINI  -  SEMANTIC SCORE + DEEP FEEDBACK
+#  6. GEMINI - SEMANTIC SCORE + DEEP FEEDBACK
 # ================================================================
 GEMINI_PROMPT = """
 You are an expert ATS (Applicant Tracking System) and career coach.
@@ -131,11 +120,6 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
 """
 
 def gemini_analysis(resume: str, job_desc: str) -> dict:
-    """
-    Calls Gemini Flash for semantic understanding.
-    Returns a dict with score + structured feedback.
-    Falls back gracefully if API key is missing or call fails.
-    """
     default = {
         "semantic_score": 0,
         "strengths": [],
@@ -150,7 +134,6 @@ def gemini_analysis(resume: str, job_desc: str) -> dict:
     try:
         gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
-        # Trim inputs to stay within token limits
         resume_trimmed = resume[:4000]
         jd_trimmed     = job_desc[:2000]
 
@@ -177,20 +160,8 @@ def gemini_analysis(resume: str, job_desc: str) -> dict:
 
 
 # ================================================================
-#  7. FINAL ATS SCORE  (weighted composite)
+#  7. FINAL ATS SCORE
 # ================================================================
-#
-#  Weight breakdown (with Gemini):
-#    40%  Gemini semantic score  - actual meaning/context understanding
-#    30%  Dynamic keyword match  - JD-specific keyword coverage
-#    20%  TF-IDF cosine          - raw text overlap
-#    10%  Section detection      - resume structure quality
-#
-#  Fallback (no Gemini):
-#    45%  Dynamic keyword match
-#    35%  TF-IDF cosine
-#    20%  Section detection
-
 def calculate_ats(resume: str, job_desc: str, use_ai: bool = True) -> dict:
     resume_clean = clean_text(resume)
     job_clean    = clean_text(job_desc)
@@ -240,7 +211,7 @@ def calculate_ats(resume: str, job_desc: str, use_ai: bool = True) -> dict:
 
 
 # ================================================================
-#  8. API ENDPOINT
+#  8. API ENDPOINTS
 # ================================================================
 @app.route("/debug", methods=["GET"])
 def debug():
@@ -250,15 +221,7 @@ def debug():
         "key_length": len(key),
         "key_preview": key[:8] if key else "EMPTY"
     })
-```
 
-**Step 4 — Commit it**
-- Scroll down → click **"Commit changes"**
-- Render will auto-detect the push and start redeploying
-
-**Step 5 — Wait ~3-5 mins, then open this in your browser:**
-```
-https://resume-analyser-2gp6.onrender.com/debug
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
@@ -281,26 +244,17 @@ def analyze():
         result = calculate_ats(resume_text, job_desc, use_ai)
 
         return jsonify({
-            # Core scores
             "ATS Score":      result["ats_score"],
             "AI Score":       result["ai_score"],
             "Mode":           mode,
-
-            # Keyword analysis (dynamic, JD-specific)
             "Matched Skills":   result["matched_keywords"],
             "Missing Keywords": result["missing_keywords"],
-
-            # Resume structure
             "Found Sections":   result["found_sections"],
-
-            # AI feedback from Gemini
             "Strengths":        result["gemini"]["strengths"],
             "Suggestions":      result["gemini"]["improvements"],
             "AI Improvements":  result["gemini"]["improvements"],
             "Overall Verdict":  result["gemini"]["overall_verdict"],
             "Gemini Missing":   result["gemini"]["missing_skills"],
-
-            # Detailed breakdown
             "Breakdown": {
                 "AI Semantic": result["ai_score"],
                 "TF-IDF":      result["tfidf_score"],
