@@ -242,6 +242,23 @@ def calculate_ats(resume: str, job_desc: str, use_ai: bool = True) -> dict:
 # ================================================================
 #  8. API ENDPOINT
 # ================================================================
+@app.route("/debug", methods=["GET"])
+def debug():
+    key = os.environ.get("GEMINI_API_KEY", "")
+    return jsonify({
+        "key_set": bool(key),
+        "key_length": len(key),
+        "key_preview": key[:8] if key else "EMPTY"
+    })
+```
+
+**Step 4 — Commit it**
+- Scroll down → click **"Commit changes"**
+- Render will auto-detect the push and start redeploying
+
+**Step 5 — Wait ~3-5 mins, then open this in your browser:**
+```
+https://resume-analyser-2gp6.onrender.com/debug
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
