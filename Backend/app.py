@@ -2,12 +2,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import re
 
-# OLD ML
+# ML (TF-IDF based scoring)
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
-# NEW AI MODEL 🔥
-from sentence_transformers import SentenceTransformer, util
 
 # PDF READER
 import fitz
@@ -15,9 +12,6 @@ import fitz
 # ---------------- APP ----------------
 app = Flask(__name__)
 CORS(app)
-
-# LOAD AI MODEL (loads once)
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
 
 # ---------------- PDF EXTRACT ----------------
@@ -89,19 +83,26 @@ def tfidf_score(resume, job_desc):
         return 0
 
 
-# ---------------- 🧠 AI SCORE ----------------
+# ---------------- SEMANTIC SCORE (TF-IDF bigrams, replaces sentence-transformers) ----------------
 def ai_semantic_score(resume, job_desc):
+    """
+    Uses TF-IDF with bigrams on raw (uncleaned) text to approximate
+    semantic similarity — lightweight replacement for SentenceTransformer.
+    """
     try:
-        emb1 = model.encode(resume, convert_to_tensor=True)
-        emb2 = model.encode(job_desc, convert_to_tensor=True)
-
-        score = util.cos_sim(emb1, emb2).item()
+        vectorizer = TfidfVectorizer(
+            stop_words='english',
+            ngram_range=(1, 2),   # unigrams + bigrams
+            max_features=10000
+        )
+        vectors = vectorizer.fit_transform([resume, job_desc])
+        score = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
         return max(0, min(score * 100, 100))
     except:
         return 0
 
 
-# ---------------- 🤖 AI IMPROVEMENTS ----------------
+# ---------------- RESUME IMPROVEMENTS ----------------
 def ai_resume_improver(resume, job_desc):
     try:
         improvements = []
@@ -135,7 +136,7 @@ def get_missing_keywords(resume, job_desc):
     job_words = set(job_desc.split())
 
     stopwords = {
-        "the","and","or","for","with","a","an","to","in","on","of","is","are"
+        "the", "and", "or", "for", "with", "a", "an", "to", "in", "on", "of", "is", "are"
     }
 
     job_words = job_words - stopwords
@@ -184,12 +185,11 @@ def calculate_ats(resume, job_desc, use_ai=True):
     resume_clean = clean_text(resume)
     job_clean = clean_text(job_desc)
 
-    # OLD SCORES
     tfidf = tfidf_score(resume_clean, job_clean)
     kw = keyword_score(resume_clean, job_clean)
     section = section_score(resume_clean)
 
-    # AI SCORE
+    # Semantic score via bigram TF-IDF (no heavy model needed)
     ai_score = 0
     if use_ai:
         try:
@@ -197,7 +197,6 @@ def calculate_ats(resume, job_desc, use_ai=True):
         except:
             ai_score = 0
 
-    # FINAL SCORE
     final_score = (
         (0.35 * ai_score if use_ai else 0) +
         0.30 * kw +
@@ -215,7 +214,6 @@ def analyze():
         file = request.files["resume"]
         job_desc = request.form["job_desc"]
 
-        # MODE (FAST / AI)
         mode = request.form.get("mode", "fast")
         use_ai = True if mode == "ai" else False
 
