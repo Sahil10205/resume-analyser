@@ -1,258 +1,305 @@
+import os
+import re
+import json
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import re
 
-# ML (TF-IDF based scoring)
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# PDF READER
-import fitz
+import fitz  # PyMuPDF
 
-# ---------------- APP ----------------
+import google.generativeai as genai
+
+# ---------------- APP SETUP ----------------
 app = Flask(__name__)
 CORS(app)
 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
-# ---------------- PDF EXTRACT ----------------
-def extract_text(file):
+
+# ================================================================
+#  1. PDF TEXT EXTRACTION
+# ================================================================
+def extract_text(file) -> str:
+    """Extract plain text from an uploaded PDF file."""
     try:
         pdf = fitz.open(stream=file.read(), filetype="pdf")
-        text = ""
-        for page in pdf:
-            text += page.get_text()
-        return text
-    except:
+        return "".join(page.get_text() for page in pdf)
+    except Exception:
         return file.read().decode(errors="ignore")
 
 
-# ---------------- CLEAN TEXT ----------------
-def clean_text(text):
+# ================================================================
+#  2. TEXT CLEANING
+# ================================================================
+def clean_text(text: str) -> str:
     text = text.lower()
-    text = re.sub(r'[^a-zA-Z0-9+ ]', ' ', text)
+    text = re.sub(r"[^a-zA-Z0-9+ ]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
-# ---------------- KEYWORD MATCH ----------------
-def keyword_score(resume, job_desc):
-    skills = [
-        "python", "c++", "java", "javascript", "html", "css",
-        "sql", "dbms", "git", "github",
-        "data structures", "algorithms", "oop",
-        "machine learning", "deep learning", "api", "flask"
-    ]
-
-    resume = resume.lower()
-    job_desc = job_desc.lower()
-
-    match = 0
-    total = 0
-
-    for skill in skills:
-        if skill in job_desc:
-            total += 1
-            if skill in resume:
-                match += 1
-
-    if total == 0:
-        return 0
-
-    return (match / total) * 100
-
-
-# ---------------- SECTION SCORE ----------------
-def section_score(resume):
-    sections = ["education", "skills", "projects", "experience"]
-    resume = resume.lower()
-
-    score = 0
-    for sec in sections:
-        if sec in resume:
-            score += 25
-
-    return score
-
-
-# ---------------- TF-IDF SCORE ----------------
-def tfidf_score(resume, job_desc):
-    try:
-        vectorizer = TfidfVectorizer(stop_words='english')
-        tfidf = vectorizer.fit_transform([resume, job_desc])
-        return cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0] * 100
-    except:
-        return 0
-
-
-# ---------------- SEMANTIC SCORE (TF-IDF bigrams, replaces sentence-transformers) ----------------
-def ai_semantic_score(resume, job_desc):
+# ================================================================
+#  3. DYNAMIC KEYWORD EXTRACTION  (replaces hardcoded skill list)
+#     Uses TF-IDF on the JD to find its most important terms,
+#     then checks which ones appear in the resume.
+# ================================================================
+def dynamic_keyword_score(resume: str, job_desc: str):
     """
-    Uses TF-IDF with bigrams on raw (uncleaned) text to approximate
-    semantic similarity — lightweight replacement for SentenceTransformer.
+    Returns:
+        score       - 0-100 based on % of JD keywords found in resume
+        matched     - keywords found in both
+        missing     - important JD keywords absent from resume
     """
     try:
         vectorizer = TfidfVectorizer(
-            stop_words='english',
-            ngram_range=(1, 2),   # unigrams + bigrams
-            max_features=10000
+            stop_words="english",
+            ngram_range=(1, 2),
+            max_features=500
         )
-        vectors = vectorizer.fit_transform([resume, job_desc])
-        score = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
-        return max(0, min(score * 100, 100))
-    except:
-        return 0
+        vectorizer.fit([job_desc])
+
+        feature_names = vectorizer.get_feature_names_out()
+        jd_vector     = vectorizer.transform([job_desc]).toarray()[0]
+
+        # Pick top-30 terms by TF-IDF weight in the JD
+        top_indices  = jd_vector.argsort()[::-1][:30]
+        top_keywords = [feature_names[i] for i in top_indices if jd_vector[i] > 0]
+
+        resume_clean = clean_text(resume)
+
+        matched = [kw for kw in top_keywords if kw in resume_clean]
+        missing = [kw for kw in top_keywords if kw not in resume_clean]
+
+        score = (len(matched) / len(top_keywords) * 100) if top_keywords else 0
+        return round(score, 2), matched[:15], missing[:15]
+
+    except Exception:
+        return 0.0, [], []
 
 
-# ---------------- RESUME IMPROVEMENTS ----------------
-def ai_resume_improver(resume, job_desc):
+# ================================================================
+#  4. TF-IDF COSINE SIMILARITY  (baseline overlap score)
+# ================================================================
+def tfidf_score(resume: str, job_desc: str) -> float:
     try:
-        improvements = []
-
-        if "project" not in resume.lower():
-            improvements.append("Add 1-2 strong projects related to the job")
-
-        if "experience" not in resume.lower():
-            improvements.append("Add internships or real-world experience")
-
-        if len(resume.split()) < 300:
-            improvements.append("Expand resume with achievements and metrics")
-
-        if "github" not in resume.lower():
-            improvements.append("Include GitHub or portfolio links")
-
-        improvements.append("Use strong action verbs (built, designed, optimized)")
-
-        return improvements[:5]
-
-    except:
-        return ["Could not generate improvements"]
+        vectorizer = TfidfVectorizer(stop_words="english")
+        tfidf      = vectorizer.fit_transform([resume, job_desc])
+        return float(cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0] * 100)
+    except Exception:
+        return 0.0
 
 
-# ---------------- MISSING KEYWORDS ----------------
-def get_missing_keywords(resume, job_desc):
-    resume = clean_text(resume)
-    job_desc = clean_text(job_desc)
+# ================================================================
+#  5. SECTION DETECTION
+# ================================================================
+def section_score(resume: str):
+    """Returns score + list of detected sections."""
+    sections = ["education", "skills", "projects", "experience",
+                "summary", "certifications", "achievements"]
+    resume_lower = resume.lower()
+    found = [s for s in sections if s in resume_lower]
+    score = min(len(found) * 14.3, 100)
+    return round(score, 2), found
 
-    resume_words = set(resume.split())
-    job_words = set(job_desc.split())
 
-    stopwords = {
-        "the", "and", "or", "for", "with", "a", "an", "to", "in", "on", "of", "is", "are"
+# ================================================================
+#  6. GEMINI  -  SEMANTIC SCORE + DEEP FEEDBACK
+# ================================================================
+GEMINI_PROMPT = """
+You are an expert ATS (Applicant Tracking System) and career coach.
+Analyze the resume against the job description below.
+
+Return ONLY a valid JSON object (no markdown, no explanation) with this exact structure:
+{{
+  "semantic_score": <integer 0-100>,
+  "strengths": [<up to 4 short strings>],
+  "improvements": [<up to 5 specific, actionable strings>],
+  "missing_skills": [<up to 8 skill/keyword strings specific to this JD>],
+  "overall_verdict": "<one sentence summary>"
+}}
+
+--- JOB DESCRIPTION ---
+{job_desc}
+
+--- RESUME ---
+{resume}
+"""
+
+def gemini_analysis(resume: str, job_desc: str) -> dict:
+    """
+    Calls Gemini Flash for semantic understanding.
+    Returns a dict with score + structured feedback.
+    Falls back gracefully if API key is missing or call fails.
+    """
+    default = {
+        "semantic_score": 0,
+        "strengths": [],
+        "improvements": ["Set GEMINI_API_KEY environment variable for AI-powered feedback"],
+        "missing_skills": [],
+        "overall_verdict": "Gemini API not configured — showing TF-IDF score only."
     }
 
-    job_words = job_words - stopwords
-    missing = job_words - resume_words
+    if not GEMINI_API_KEY:
+        return default
 
-    return list(missing)[:10]
+    try:
+        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
+        # Trim inputs to stay within token limits
+        resume_trimmed = resume[:4000]
+        jd_trimmed     = job_desc[:2000]
 
-# ---------------- MATCHED SKILLS ----------------
-def skill_match(resume, job_desc):
-    skills = [
-        "python", "c++", "java", "javascript", "html", "css",
-        "sql", "dbms", "git", "github",
-        "data structures", "algorithms", "oop",
-        "machine learning", "deep learning"
-    ]
+        prompt   = GEMINI_PROMPT.format(job_desc=jd_trimmed, resume=resume_trimmed)
+        response = gemini_model.generate_content(prompt)
 
-    resume = resume.lower()
-    job_desc = job_desc.lower()
+        raw = response.text.strip()
+        raw = re.sub(r"^```json\s*", "", raw)
+        raw = re.sub(r"\s*```$",     "", raw)
 
-    return [s for s in skills if s in resume and s in job_desc]
+        result = json.loads(raw)
 
+        for key in ("semantic_score", "strengths", "improvements",
+                    "missing_skills", "overall_verdict"):
+            if key not in result:
+                return default
 
-# ---------------- SUGGESTIONS ----------------
-def generate_suggestions(missing_keywords, ai_score, ats_score):
-    suggestions = []
+        result["semantic_score"] = max(0, min(int(result["semantic_score"]), 100))
+        return result
 
-    for word in missing_keywords[:5]:
-        suggestions.append(f"Add '{word}' to your resume")
-
-    if ai_score < 60:
-        suggestions.append("Improve resume alignment with job description")
-
-    if ats_score < 50:
-        suggestions.append("Your resume is weak — consider restructuring")
-
-    if ats_score > 80:
-        suggestions.append("Excellent resume for this job role!")
-
-    return suggestions
+    except Exception as e:
+        print(f"[Gemini Error] {e}")
+        return default
 
 
-# ---------------- FINAL ATS ----------------
-def calculate_ats(resume, job_desc, use_ai=True):
+# ================================================================
+#  7. FINAL ATS SCORE  (weighted composite)
+# ================================================================
+#
+#  Weight breakdown (with Gemini):
+#    40%  Gemini semantic score  - actual meaning/context understanding
+#    30%  Dynamic keyword match  - JD-specific keyword coverage
+#    20%  TF-IDF cosine          - raw text overlap
+#    10%  Section detection      - resume structure quality
+#
+#  Fallback (no Gemini):
+#    45%  Dynamic keyword match
+#    35%  TF-IDF cosine
+#    20%  Section detection
 
+def calculate_ats(resume: str, job_desc: str, use_ai: bool = True) -> dict:
     resume_clean = clean_text(resume)
-    job_clean = clean_text(job_desc)
+    job_clean    = clean_text(job_desc)
 
-    tfidf = tfidf_score(resume_clean, job_clean)
-    kw = keyword_score(resume_clean, job_clean)
-    section = section_score(resume_clean)
+    tfidf                            = tfidf_score(resume_clean, job_clean)
+    kw_score, matched_kw, missing_kw = dynamic_keyword_score(resume, job_desc)
+    sec_score, found_sections        = section_score(resume)
 
-    # Semantic score via bigram TF-IDF (no heavy model needed)
-    ai_score = 0
+    gemini_result = {
+        "semantic_score": 0,
+        "strengths": [],
+        "improvements": [],
+        "missing_skills": [],
+        "overall_verdict": ""
+    }
+
     if use_ai:
-        try:
-            ai_score = ai_semantic_score(resume, job_desc)
-        except:
-            ai_score = 0
+        gemini_result = gemini_analysis(resume, job_desc)
 
-    final_score = (
-        (0.35 * ai_score if use_ai else 0) +
-        0.30 * kw +
-        0.20 * tfidf +
-        0.15 * section
-    )
+    ai_score = gemini_result["semantic_score"]
 
-    return round(final_score, 2), tfidf, kw, section, ai_score
+    if use_ai and ai_score > 0:
+        final = (
+            0.40 * ai_score +
+            0.30 * kw_score +
+            0.20 * tfidf    +
+            0.10 * sec_score
+        )
+    else:
+        final = (
+            0.45 * kw_score +
+            0.35 * tfidf    +
+            0.20 * sec_score
+        )
+
+    return {
+        "ats_score":        round(final, 1),
+        "ai_score":         ai_score,
+        "tfidf_score":      round(tfidf, 1),
+        "keyword_score":    round(kw_score, 1),
+        "section_score":    round(sec_score, 1),
+        "matched_keywords": matched_kw,
+        "missing_keywords": missing_kw,
+        "found_sections":   found_sections,
+        "gemini":           gemini_result,
+    }
 
 
-# ---------------- API ----------------
+# ================================================================
+#  8. API ENDPOINT
+# ================================================================
 @app.route("/analyze", methods=["POST"])
 def analyze():
     try:
-        file = request.files["resume"]
-        job_desc = request.form["job_desc"]
+        file     = request.files.get("resume")
+        job_desc = request.form.get("job_desc", "").strip()
 
-        mode = request.form.get("mode", "fast")
-        use_ai = True if mode == "ai" else False
+        if not file or not job_desc:
+            return jsonify({"error": "Both 'resume' (PDF) and 'job_desc' are required."}), 400
 
-        print(f"⚡ Mode: {mode}")
+        mode   = request.form.get("mode", "ai")
+        use_ai = (mode == "ai")
+
+        print(f"[Request] mode={mode} | JD length={len(job_desc)}")
 
         resume_text = extract_text(file)
 
-        score, tfidf, kw, section, ai_score = calculate_ats(
-            resume_text, job_desc, use_ai
-        )
+        if not resume_text.strip():
+            return jsonify({"error": "Could not extract text from the PDF."}), 400
 
-        missing = get_missing_keywords(resume_text, job_desc)
-        matched = skill_match(resume_text, job_desc)
-        suggestions = generate_suggestions(missing, ai_score, score)
-        improvements = ai_resume_improver(resume_text, job_desc)
+        result = calculate_ats(resume_text, job_desc, use_ai)
 
         return jsonify({
-            "ATS Score": score,
-            "AI Score": round(ai_score, 2),
-            "Mode": mode,
-            "Matched Skills": matched,
-            "Missing Keywords": missing,
-            "Suggestions": suggestions,
-            "AI Improvements": improvements,
+            # Core scores
+            "ATS Score":      result["ats_score"],
+            "AI Score":       result["ai_score"],
+            "Mode":           mode,
+
+            # Keyword analysis (dynamic, JD-specific)
+            "Matched Skills":   result["matched_keywords"],
+            "Missing Keywords": result["missing_keywords"],
+
+            # Resume structure
+            "Found Sections":   result["found_sections"],
+
+            # AI feedback from Gemini
+            "Strengths":        result["gemini"]["strengths"],
+            "Suggestions":      result["gemini"]["improvements"],
+            "AI Improvements":  result["gemini"]["improvements"],
+            "Overall Verdict":  result["gemini"]["overall_verdict"],
+            "Gemini Missing":   result["gemini"]["missing_skills"],
+
+            # Detailed breakdown
             "Breakdown": {
-                "AI": round(ai_score, 2),
-                "TF-IDF": round(tfidf, 2),
-                "Keywords": round(kw, 2),
-                "Sections": section
+                "AI Semantic": result["ai_score"],
+                "TF-IDF":      result["tfidf_score"],
+                "Keywords":    result["keyword_score"],
+                "Sections":    result["section_score"],
             }
         })
 
     except Exception as e:
-        return jsonify({"error": str(e)})
+        print(f"[Server Error] {e}")
+        return jsonify({"error": str(e)}), 500
 
 
-# ---------------- RUN ----------------
-import os
-
+# ================================================================
+#  9. RUN
+# ================================================================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
