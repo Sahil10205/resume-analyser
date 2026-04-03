@@ -260,7 +260,7 @@ def analyze():
 
         return jsonify({
             "ATS Score":        result["ats_score"],
-            "AI Score":         result["ai_score"],
+        "AI Score": result["ai_score"] if result["ai_score"] > 0 else "Not Available",
             "Mode":             mode,
             "Matched Skills":   result["matched_keywords"],
             "Missing Keywords": result["missing_keywords"],
