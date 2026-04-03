@@ -22,8 +22,16 @@ def home():
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 client = None
-if GEMINI_API_KEY:
-    client = genai.Client(api_key=GEMINI_API_KEY)
+
+try:
+    if GEMINI_API_KEY:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        print("✅ Gemini client initialized")
+    else:
+        print("❌ GEMINI_API_KEY missing")
+except Exception as e:
+    print("❌ Gemini init error:", e)
+    client = None
 
 
 # ================================================================
