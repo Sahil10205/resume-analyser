@@ -16,6 +16,10 @@ from google import genai
 app = Flask(__name__)
 CORS(app)
 
+@app.route("/")
+def home():
+    return "Backend is running successfully"
+
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 client = None
 if GEMINI_API_KEY:
