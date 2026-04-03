@@ -10,15 +10,16 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import fitz  # PyMuPDF
 
-import google.generativeai as genai
+from google import genai
 
 # ---------------- APP SETUP ----------------
 app = Flask(__name__)
 CORS(app)
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+client = None
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+    client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # ================================================================
@@ -128,17 +129,18 @@ def gemini_analysis(resume: str, job_desc: str) -> dict:
         "overall_verdict": "Gemini API not configured — showing TF-IDF score only."
     }
 
-    if not GEMINI_API_KEY:
+    if not client:
         return default
 
     try:
-        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-
         resume_trimmed = resume[:4000]
         jd_trimmed     = job_desc[:2000]
 
         prompt   = GEMINI_PROMPT.format(job_desc=jd_trimmed, resume=resume_trimmed)
-        response = gemini_model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
 
         raw = response.text.strip()
         raw = re.sub(r"^```json\s*", "", raw)
@@ -244,9 +246,9 @@ def analyze():
         result = calculate_ats(resume_text, job_desc, use_ai)
 
         return jsonify({
-            "ATS Score":      result["ats_score"],
-            "AI Score":       result["ai_score"],
-            "Mode":           mode,
+            "ATS Score":        result["ats_score"],
+            "AI Score":         result["ai_score"],
+            "Mode":             mode,
             "Matched Skills":   result["matched_keywords"],
             "Missing Keywords": result["missing_keywords"],
             "Found Sections":   result["found_sections"],
