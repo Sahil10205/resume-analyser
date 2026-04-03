@@ -15,32 +15,25 @@ body {
     animation: gradientBG 10s ease infinite;
     color: white;
 }
-
 @keyframes gradientBG {
     0% {background-position:0% 50%;}
     50% {background-position:100% 50%;}
     100% {background-position:0% 50%;}
 }
-
 h1 { text-align: center; }
-
 .container { padding: 20px; }
-
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
     gap: 20px;
 }
-
 .glass {
     background: rgba(255,255,255,0.08);
     backdrop-filter: blur(15px);
     padding: 20px;
     border-radius: 15px;
 }
-
 textarea { width: 100%; height: 120px; }
-
 button {
     width: 100%;
     padding: 12px;
@@ -50,26 +43,15 @@ button {
     cursor: pointer;
     border-radius: 8px;
 }
-
 .progress-bar { background: rgba(255,255,255,0.2); }
-
 .progress {
     height: 25px;
     width: 0%;
     text-align: center;
     font-weight: bold;
 }
-
-.good { background: #00ffcc; color: black; }
-.bad { background: #ff6b6b; }
-
 .loader { display:none; text-align:center; }
-
-/* NEW */
-.toggle {
-    display:flex;
-    gap:10px;
-}
+.toggle { display:flex; gap:10px; }
 </style>
 </head>
 
@@ -89,8 +71,6 @@ button {
 
 <div class="glass">
 <form id="form">
-
-<!-- NEW MODE TOGGLE -->
 <div class="toggle">
     <label><input type="radio" name="mode" value="fast" checked> ⚡ Fast</label>
     <label><input type="radio" name="mode" value="ai"> 🧠 AI</label>
@@ -102,7 +82,6 @@ button {
 <textarea id="job" placeholder="Paste Job Description"></textarea><br><br>
 
 <button type="submit" id="analyzeBtn">Analyze Resume</button>
-
 </form>
 </div>
 
@@ -114,26 +93,10 @@ button {
 <h4 id="aiScore"></h4>
 </div>
 
-<div class="glass">
-<h3>Matched Skills</h3>
-<div id="matched"></div>
-</div>
-
-<div class="glass">
-<h3>Missing Keywords</h3>
-<div id="keywords"></div>
-</div>
-
-<div class="glass">
-<h3>Suggestions</h3>
-<ul id="suggestions"></ul>
-</div>
-
-<!-- NEW AI IMPROVEMENTS -->
-<div class="glass">
-<h3>🤖 AI Improvements</h3>
-<ul id="improvements"></ul>
-</div>
+<div class="glass"><h3>Matched Skills</h3><div id="matched"></div></div>
+<div class="glass"><h3>Missing Keywords</h3><div id="keywords"></div></div>
+<div class="glass"><h3>Suggestions</h3><ul id="suggestions"></ul></div>
+<div class="glass"><h3>🤖 AI Improvements</h3><ul id="improvements"></ul></div>
 
 <div class="glass">
 <h3>📊 Breakdown</h3>
@@ -146,7 +109,6 @@ button {
 <ul id="history"></ul>
 </div>
 
-<!-- DOWNLOAD -->
 <div class="glass">
 <button onclick="downloadReport()">📥 Download Report</button>
 </div>
@@ -162,10 +124,10 @@ button {
 <script>
 let lastData = null;
 
-// LOGIN
+// GOOGLE LOGIN
 document.getElementById("loginBtn").onclick = () => {
     google.accounts.id.initialize({
-        client_id: "YOUR_CLIENT_ID",
+        client_id: "141774196290-q5b1lqub5elvr4ebeq2r68etr00ibbej.apps.googleusercontent.com",
         callback: handleCredentialResponse
     });
     google.accounts.id.prompt();
@@ -194,7 +156,7 @@ function loadHistory() {
 }
 loadHistory();
 
-// SCORE COLOR
+// COLOR
 function getColor(score){
     if(score>75) return "lime";
     if(score>50) return "orange";
@@ -212,8 +174,6 @@ document.getElementById("loader").style.display="block";
 
 let file=document.getElementById("resume").files[0];
 let job=document.getElementById("job").value;
-
-// MODE
 let mode=document.querySelector('input[name="mode"]:checked').value;
 
 let formData=new FormData();
@@ -221,7 +181,11 @@ formData.append("resume",file);
 formData.append("job_desc",job);
 formData.append("mode",mode);
 
-let res=await fetch("http://127.0.0.1:5000/analyze",{method:"POST",body:formData});
+let res=await fetch("https://resume-analyser-production-93d7.up.railway.app/analyze",{
+method:"POST",
+body:formData
+});
+
 let data=await res.json();
 lastData=data;
 
@@ -233,13 +197,12 @@ bar.style.width=score+"%";
 bar.style.background=getColor(score);
 bar.innerText=score+"%";
 
-document.getElementById("aiScore").innerText="🧠 AI: "+ai+"%";
+document.getElementById("aiScore").innerText =
+(ai==="Not Available") ? "🧠 AI: Not Available" : "🧠 AI: "+ai+"%";
 
-// improvements
 document.getElementById("improvements").innerHTML=
 data["AI Improvements"].map(s=>`<li>${s}</li>`).join("");
 
-// chart
 new Chart(document.getElementById("chart"),{
 type:"bar",
 data:{
