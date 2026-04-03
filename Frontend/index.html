@@ -61,12 +61,6 @@ button {
 
 <div class="container">
 
-<div class="glass">
-    <button id="loginBtn">🔐 Login with Google</button>
-    <button onclick="logout()">Logout</button>
-    <p id="user"></p>
-</div>
-
 <div class="grid">
 
 <div class="glass">
@@ -119,27 +113,8 @@ button {
 
 </div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-
 <script>
 let lastData = null;
-
-// GOOGLE LOGIN
-document.getElementById("loginBtn").onclick = () => {
-    google.accounts.id.initialize({
-        client_id: "141774196290-q5b1lqub5elvr4ebeq2r68etr00ibbej.apps.googleusercontent.com",
-        callback: handleCredentialResponse
-    });
-    google.accounts.id.prompt();
-};
-
-function handleCredentialResponse(response) {
-    document.getElementById("user").innerText = "Logged in";
-}
-
-function logout() {
-    document.getElementById("user").innerText = "";
-}
 
 // HISTORY
 function saveHistory(score, aiScore) {
