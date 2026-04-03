@@ -174,17 +174,20 @@ bar.innerText=score+"%";
 document.getElementById("aiScore").innerText =
 (ai==="Not Available") ? "🧠 AI: Not Available" : "🧠 AI: "+ai+"%";
 
-// DATA RENDER FIXES
+// SAFE RENDER
 document.getElementById("matched").innerHTML =
-(data["Matched Skills"] || []).map(s => `<li>${s}</li>`).join("");
+(data["Matched Skills"]?.length ? data["Matched Skills"] : ["No matched skills found"])
+.map(s => `<li>${s}</li>`).join("");
 
 document.getElementById("keywords").innerHTML =
-(data["Missing Keywords"] || []).map(s => `<li>${s}</li>`).join("");
+(data["Missing Keywords"]?.length ? data["Missing Keywords"] : ["No missing keywords"])
+.map(s => `<li>${s}</li>`).join("");
 
 document.getElementById("suggestions").innerHTML =
-(data["Suggestions"] || []).map(s => `<li>${s}</li>`).join("");
+(data["Suggestions"]?.length ? data["Suggestions"] : ["No suggestions available"])
+.map(s => `<li>${s}</li>`).join("");
 
-// AI improvements fallback
+// AI
 if (ai === "Not Available") {
   document.getElementById("improvements").innerHTML =
   "<li>AI quota exceeded. Showing basic analysis.</li>";
@@ -193,7 +196,7 @@ if (ai === "Not Available") {
   (data["AI Improvements"] || []).map(s=>`<li>${s}</li>`).join("");
 }
 
-// CHART FIX
+// CHART
 new Chart(document.getElementById("chart"),{
 type:"bar",
 data:{
@@ -219,8 +222,7 @@ btn.innerText="Analyze Resume";
 // DOWNLOAD
 function downloadReport(){
     if(!lastData) return alert("Run analysis first!");
-    let text=JSON.stringify(lastData,null,2);
-    let blob=new Blob([text],{type:"text/plain"});
+    let blob=new Blob([JSON.stringify(lastData,null,2)],{type:"text/plain"});
     let a=document.createElement("a");
     a.href=URL.createObjectURL(blob);
     a.download="report.txt";
