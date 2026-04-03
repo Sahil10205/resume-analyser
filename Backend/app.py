@@ -28,26 +28,27 @@ def clean_text(t):
     t=re.sub(r"[^a-z0-9+ ]"," ",t)
     return re.sub(r"\s+"," ",t)
 
-def dynamic_keyword_score(resume, jd):
+def dynamic_keyword_score(resume: str, job_desc: str):
     try:
-        v=TfidfVectorizer(stop_words="english",ngram_range=(1,2),max_features=500)
-        v.fit([jd])
-        names=v.get_feature_names_out()
-        vec=v.transform([jd]).toarray()[0]
+        resume_clean = clean_text(resume)
+        job_clean = clean_text(job_desc)
 
-        top=[names[i] for i in vec.argsort()[::-1][:30] if vec[i]>0]
-        rc=clean_text(resume)
+        # fallback keywords (IMPORTANT)
+        words = list(set(job_clean.split()))
+        words = [w for w in words if len(w) > 2]
 
-        matched=[]
-        for kw in top:
-            if all(w in rc for w in kw.split()):
-                matched.append(kw)
+        top_keywords = words[:30]  # simple keywords
 
-        missing=[k for k in top if k not in matched]
-        score=(len(matched)/len(top)*100) if top else 0
-        return round(score,2),matched[:15],missing[:15]
-    except:
-        return 0,[],[]
+        matched = [kw for kw in top_keywords if kw in resume_clean]
+        missing = [kw for kw in top_keywords if kw not in resume_clean]
+
+        score = (len(matched) / len(top_keywords) * 100) if top_keywords else 0
+
+        return round(score, 2), matched[:15], missing[:15]
+
+    except Exception as e:
+        print("Keyword Error:", e)
+        return 0.0, [], []
 
 def tfidf_score(r,j):
     try:
