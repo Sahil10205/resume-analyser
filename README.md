@@ -2,34 +2,35 @@
 
 ## 📌 Overview
 
-AI Resume Analyzer is a full-stack, AI-powered web application designed to simulate real-world Applicant Tracking Systems (ATS). It leverages Natural Language Processing (NLP) and machine learning techniques to evaluate resumes against job descriptions, providing actionable insights to improve candidate shortlisting probability.
+AI Resume Analyzer is a full-stack, AI-powered web application designed to simulate real-world Applicant Tracking Systems (ATS). It leverages Natural Language Processing (NLP) techniques to evaluate resumes against job descriptions and generate actionable insights to improve candidate shortlisting probability.
 
 ---
 
 ## 🔗 Live Deployment
 
-* 🌐 Frontend (Vercel): https://your-vercel-link
-* ⚙️ Backend API (Railway): https://your-railway-link
+* 🌐 **Live Application:** https://resume-analyser-ep79ya043-sahil10205.vercel.app/
+* ⚙️ **Backend API:** https://resume-analyser-production-93d7.up.railway.app
+* 💻 **GitHub Repository:** https://github.com/Sahil10205/resume-analyser
 
 ---
 
-## ✨ Core Features
+## ✨ Key Features
 
-* 📄 **Automated Resume Parsing** using PDF text extraction
-* 🎯 **ATS Score Generation** using TF-IDF vectorization and cosine similarity
-* 🧠 **AI-Augmented Feedback System** with graceful fallback handling
-* 🔍 **Dynamic Keyword Extraction & Matching Engine**
-* 📊 **Interactive Data Visualization** using Chart.js
-* ⚡ **Low-latency API Communication** with optimized request handling
-* 🕓 **Client-side State Persistence** (localStorage-based history tracking)
-* 🎨 **Modern UI/UX** with responsive and minimal design principles
+* 📄 Automated PDF resume parsing
+* 🎯 ATS score generation using TF-IDF and cosine similarity
+* 🔍 Keyword matching and missing keyword detection
+* 📊 Interactive data visualization using Chart.js
+* ⚡ Speedtest-style circular ATS score animation for enhanced UX
+* 🕓 Local history tracking using browser storage
+* 🧠 AI-based feedback system with fallback handling (graceful degradation)
+* 🛡️ Robust error handling for API failures and edge cases
 
 ---
 
 ## 🧠 System Architecture
 
-```id="arch1"
-Frontend (Vercel) → REST API (Flask Backend) → NLP Processing Layer → Scoring Engine → JSON Response
+```
+Frontend (Vercel) → Flask Backend (Railway) → NLP Processing → Scoring Engine → JSON Response
 ```
 
 ---
@@ -38,21 +39,17 @@ Frontend (Vercel) → REST API (Flask Backend) → NLP Processing Layer → Scor
 
 ### 🔹 Frontend
 
-* HTML5, CSS3, JavaScript (ES6+)
+* HTML5, CSS3, JavaScript
 * Chart.js (Data Visualization)
 * Fetch API (Asynchronous API communication)
 
 ### 🔹 Backend
 
-* Python (Flask Microframework)
+* Python (Flask)
 * Scikit-learn (TF-IDF Vectorization, Cosine Similarity)
-* PyMuPDF (High-performance PDF parsing)
+* PyMuPDF (PDF parsing)
 
-### 🔹 AI Integration
-
-* Google Gemini API (LLM-based semantic analysis & feedback)
-
-### 🔹 Deployment & DevOps
+### 🔹 Deployment
 
 * Vercel (Frontend Hosting)
 * Railway (Backend Deployment)
@@ -62,69 +59,64 @@ Frontend (Vercel) → REST API (Flask Backend) → NLP Processing Layer → Scor
 
 ## ⚙️ Functional Workflow
 
-1. User uploads a resume and provides a job description
-2. Backend performs **text extraction and normalization**
-3. NLP pipeline executes:
-
-   * Tokenization and cleaning
-   * TF-IDF feature extraction
-   * Cosine similarity computation
+1. User uploads a resume (PDF) and provides a job description
+2. Backend performs text extraction and normalization
+3. NLP pipeline executes TF-IDF feature extraction and similarity computation
 4. Keyword matching engine identifies relevant and missing terms
-5. Optional AI layer generates semantic insights and improvements
+5. Optional AI layer generates semantic insights (with fallback handling)
 6. Composite ATS score is calculated using weighted metrics
 7. Results are returned and visualized on the frontend
 
 ---
 
-## 📊 Output Metrics
+## 📊 Output
 
-* 📈 ATS Compatibility Score (0–100)
-* 🧩 Keyword Match Analysis (Matched vs Missing)
-* 📉 Section-wise Score Breakdown
-* 🧠 AI-driven Resume Improvement Suggestions
+* 📈 ATS Score (Speedtest-style circular visualization)
+* 📉 Score breakdown (TF-IDF, Keywords, Sections)
+* 🕓 Analysis history tracking
 
 ---
 
-## ▶️ Local Development Setup
+## ▶️ Local Setup
 
 ### 1. Clone Repository
 
-```id="clone1"
-git clone https://github.com/your-username/resume-analyzer.git
-cd resume-analyzer
+```
+git clone https://github.com/Sahil10205/resume-analyser.git
+cd resume-analyser
 ```
 
 ### 2. Install Dependencies
 
-```id="dep1"
+```
 pip install flask flask-cors scikit-learn numpy PyMuPDF
 ```
 
-### 3. Run Backend Server
+### 3. Run Backend
 
-```id="run1"
+```
 cd backend
 python app.py
 ```
 
-### 4. Launch Frontend
+### 4. Run Frontend
 
 Open `frontend/index.html` in your browser
 
 ---
 
-## ⚠️ Operational Note
+## ⚠️ Note
 
-The backend is hosted on a free-tier cloud environment (Railway). Initial requests may experience slight latency due to cold-start behavior.
+The backend is hosted on a free-tier cloud service (Railway), so the first request may take a few seconds due to cold-start latency.
 
 ---
 
-## 🚀 Future Scope & Enhancements
+## 🚀 Future Enhancements
 
-* Advanced semantic scoring using transformer-based models (BERT/GPT)
-* Resume rewriting and optimization using generative AI
-* Authentication system with personalized dashboards
-* Exportable, recruiter-ready PDF reports
+* Advanced NLP models (BERT / Transformers)
+* AI-powered resume rewriting suggestions
+* User authentication & personalized dashboard
+* Exportable recruiter-ready PDF reports
 * Integration with job portals and ATS pipelines
 
 ---
