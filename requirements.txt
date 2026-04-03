@@ -4,4 +4,4 @@ gunicorn
 scikit-learn
 numpy
 PyMuPDF
-google-generativeai
+google-genai
