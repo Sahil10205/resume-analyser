@@ -2,202 +2,203 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>AI Resume Analyzer Pro</title>
+<title>AI Resume Analyzer</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
 body {
-    margin: 0;
-    font-family: 'Segoe UI', sans-serif;
-    background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1c1c1c);
-    background-size: 400% 400%;
-    animation: gradientBG 10s ease infinite;
-    color: white;
+  margin:0;
+  font-family: 'Inter', sans-serif;
+  background: radial-gradient(circle at top, #0f172a, #020617);
+  color:white;
 }
-@keyframes gradientBG {
-    0% {background-position:0% 50%;}
-    50% {background-position:100% 50%;}
-    100% {background-position:0% 50%;}
+
+h1 {
+  text-align:center;
+  font-size:2.5rem;
+  margin:20px 0;
+  background: linear-gradient(90deg,#00c6ff,#0072ff);
+  -webkit-background-clip:text;
+  color:transparent;
 }
-h1 { text-align: center; }
-.container { padding: 20px; }
+
+.container {
+  max-width:1200px;
+  margin:auto;
+  padding:20px;
+}
+
 .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 20px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:20px;
 }
-.glass {
-    background: rgba(255,255,255,0.08);
-    backdrop-filter: blur(15px);
-    padding: 20px;
-    border-radius: 15px;
+
+.card {
+  background: rgba(255,255,255,0.05);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:20px;
+  padding:20px;
+  backdrop-filter: blur(20px);
+  transition:0.3s;
 }
-textarea { width: 100%; height: 120px; }
+
+.card:hover {
+  transform: translateY(-5px);
+}
+
 button {
-    width: 100%;
-    padding: 12px;
-    background: linear-gradient(90deg, #00c6ff, #0072ff);
-    border: none;
-    color: white;
-    cursor: pointer;
-    border-radius: 8px;
+  width:100%;
+  padding:14px;
+  border:none;
+  border-radius:10px;
+  background: linear-gradient(90deg,#00c6ff,#0072ff);
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+  transition:0.3s;
 }
-.progress-bar { background: rgba(255,255,255,0.2); }
+button:hover { opacity:0.85; }
+
+textarea, input {
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  margin-top:10px;
+  background:#020617;
+  color:white;
+}
+
+.progress-bar {
+  background:#1e293b;
+  border-radius:10px;
+  overflow:hidden;
+}
 .progress {
-    height: 25px;
-    width: 0%;
-    text-align: center;
-    font-weight: bold;
+  height:30px;
+  width:0%;
+  text-align:center;
+  line-height:30px;
+  font-weight:bold;
 }
-.loader { display:none; text-align:center; }
-.toggle { display:flex; gap:10px; }
+
+ul { padding-left:20px; }
+
+.loader {
+  text-align:center;
+  display:none;
+  margin-top:20px;
+  font-size:18px;
+}
+
+.badge {
+  padding:5px 10px;
+  border-radius:10px;
+  font-size:12px;
+  background:#0ea5e9;
+}
+
 </style>
 </head>
 
 <body>
 
-<h1>🚀 AI Resume Analyzer Pro</h1>
+<h1>🚀 AI Resume Analyzer</h1>
 
 <div class="container">
 
 <div class="grid">
 
-<div class="glass">
+<div class="card">
 <form id="form">
-<div class="toggle">
-    <label><input type="radio" name="mode" value="fast" checked> ⚡ Fast</label>
-    <label><input type="radio" name="mode" value="ai"> 🧠 AI</label>
+<div>
+<span class="badge">Mode</span><br>
+<label><input type="radio" name="mode" value="fast" checked> Fast</label>
+<label><input type="radio" name="mode" value="ai"> AI</label>
 </div>
 
-<br>
+<input type="file" id="resume" required>
+<textarea id="job" placeholder="Paste Job Description"></textarea>
 
-<input type="file" id="resume" required><br><br>
-<textarea id="job" placeholder="Paste Job Description"></textarea><br><br>
-
-<button type="submit" id="analyzeBtn">Analyze Resume</button>
+<button type="submit" id="btn">Analyze</button>
 </form>
 </div>
 
-<div class="glass">
+<div class="card">
 <h3>ATS Score</h3>
 <div class="progress-bar">
 <div class="progress" id="progress"></div>
 </div>
-<h4 id="aiScore"></h4>
+<h3 id="aiScore"></h3>
 </div>
 
-<div class="glass"><h3>Matched Skills</h3><ul id="matched"></ul></div>
-<div class="glass"><h3>Missing Keywords</h3><ul id="keywords"></ul></div>
-<div class="glass"><h3>Suggestions</h3><ul id="suggestions"></ul></div>
-<div class="glass"><h3>🤖 AI Improvements</h3><ul id="improvements"></ul></div>
+<div class="card"><h3>Matched Skills</h3><ul id="matched"></ul></div>
+<div class="card"><h3>Missing Keywords</h3><ul id="keywords"></ul></div>
+<div class="card"><h3>Suggestions</h3><ul id="suggestions"></ul></div>
+<div class="card"><h3>AI Improvements</h3><ul id="improvements"></ul></div>
 
-<div class="glass">
-<h3>📊 Breakdown</h3>
+<div class="card">
+<h3>Breakdown</h3>
 <canvas id="chart"></canvas>
 </div>
 
-<div class="glass">
-<h3>🕓 History</h3>
-<ul id="history"></ul>
 </div>
 
-<div class="glass">
-<button onclick="downloadReport()">📥 Download Report</button>
-</div>
-
-</div>
-
-<div class="loader" id="loader">⏳ Analyzing Resume...</div>
+<div class="loader" id="loader">⏳ Analyzing...</div>
 
 </div>
 
 <script>
-let lastData = null;
-
-// HISTORY
-function saveHistory(score, aiScore) {
-    let history = JSON.parse(localStorage.getItem("history")) || [];
-    history.push({ ats: score, ai: aiScore, time: new Date().toLocaleString() });
-    localStorage.setItem("history", JSON.stringify(history));
-    loadHistory();
-}
-function loadHistory() {
-    let history = JSON.parse(localStorage.getItem("history")) || [];
-    document.getElementById("history").innerHTML =
-        history.map(h => `<li>${h.ats}% | ${h.ai}% (${h.time})</li>`).join("");
-}
-loadHistory();
-
-// COLOR
-function getColor(score){
-    if(score>75) return "lime";
-    if(score>50) return "orange";
-    return "red";
+function color(score){
+  if(score>75) return "#22c55e";
+  if(score>50) return "#f59e0b";
+  return "#ef4444";
 }
 
-// FORM
-document.getElementById("form").onsubmit = async (e)=>{
+document.getElementById("form").onsubmit = async(e)=>{
 e.preventDefault();
 
-let btn=document.getElementById("analyzeBtn");
-btn.disabled=true;
+let btn=document.getElementById("btn");
 btn.innerText="Analyzing...";
-document.getElementById("loader").style.display="block";
+btn.disabled=true;
+loader.style.display="block";
 
-let file=document.getElementById("resume").files[0];
-let job=document.getElementById("job").value;
-let mode=document.querySelector('input[name="mode"]:checked').value;
+let fd=new FormData();
+fd.append("resume",resume.files[0]);
+fd.append("job_desc",job.value);
+fd.append("mode",document.querySelector('input[name="mode"]:checked').value);
 
-let formData=new FormData();
-formData.append("resume",file);
-formData.append("job_desc",job);
-formData.append("mode",mode);
-
-let res=await fetch("https://resume-analyser-production-93d7.up.railway.app/analyze",{
-method:"POST",
-body:formData
-});
-
+let res=await fetch("https://resume-analyser-production-93d7.up.railway.app/analyze",{method:"POST",body:fd});
 let data=await res.json();
-lastData=data;
 
 // SCORE
-let score=data["ATS Score"];
-let ai=data["AI Score"];
+let s=data["ATS Score"];
+progress.style.width=s+"%";
+progress.style.background=color(s);
+progress.innerText=s+"%";
 
-let bar=document.getElementById("progress");
-bar.style.width=score+"%";
-bar.style.background=getColor(score);
-bar.innerText=score+"%";
+aiScore.innerText="AI: "+data["AI Score"];
 
-document.getElementById("aiScore").innerText =
-(ai==="Not Available") ? "🧠 AI: Not Available" : "🧠 AI: "+ai+"%";
+// LISTS
+function render(id,arr,msg){
+document.getElementById(id).innerHTML=
+(arr?.length?arr:[msg]).map(x=>`<li>${x}</li>`).join("");
+}
 
-// SAFE RENDER
-document.getElementById("matched").innerHTML =
-(data["Matched Skills"]?.length ? data["Matched Skills"] : ["No matched skills found"])
-.map(s => `<li>${s}</li>`).join("");
+render("matched",data["Matched Skills"],"No matches");
+render("keywords",data["Missing Keywords"],"No missing");
+render("suggestions",data["Suggestions"],"No suggestions");
 
-document.getElementById("keywords").innerHTML =
-(data["Missing Keywords"]?.length ? data["Missing Keywords"] : ["No missing keywords"])
-.map(s => `<li>${s}</li>`).join("");
-
-document.getElementById("suggestions").innerHTML =
-(data["Suggestions"]?.length ? data["Suggestions"] : ["No suggestions available"])
-.map(s => `<li>${s}</li>`).join("");
-
-// AI
-if (ai === "Not Available") {
-  document.getElementById("improvements").innerHTML =
-  "<li>AI quota exceeded. Showing basic analysis.</li>";
-} else {
-  document.getElementById("improvements").innerHTML =
-  (data["AI Improvements"] || []).map(s=>`<li>${s}</li>`).join("");
+if(data["AI Score"]==="Not Available"){
+render("improvements",["AI not available"],"");
+}else{
+render("improvements",data["AI Improvements"],"");
 }
 
 // CHART
-new Chart(document.getElementById("chart"),{
+new Chart(chart,{
 type:"bar",
 data:{
 labels:["AI","TF-IDF","Keywords","Sections"],
@@ -212,22 +213,10 @@ data.Breakdown.Sections
 }
 });
 
-saveHistory(score,ai);
-
-document.getElementById("loader").style.display="none";
+loader.style.display="none";
+btn.innerText="Analyze";
 btn.disabled=false;
-btn.innerText="Analyze Resume";
 };
-
-// DOWNLOAD
-function downloadReport(){
-    if(!lastData) return alert("Run analysis first!");
-    let blob=new Blob([JSON.stringify(lastData,null,2)],{type:"text/plain"});
-    let a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download="report.txt";
-    a.click();
-}
 </script>
 
 </body>
