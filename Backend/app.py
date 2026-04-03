@@ -136,9 +136,9 @@ def gemini_analysis(resume: str, job_desc: str) -> dict:
     default = {
         "semantic_score": 0,
         "strengths": [],
-        "improvements": ["Set GEMINI_API_KEY environment variable for AI-powered feedback"],
+        "improvements": ["AI feedback unavailable (quota or API issue)"],
         "missing_skills": [],
-        "overall_verdict": "Gemini API not configured — showing TF-IDF score only."
+        "overall_verdict": "AI analysis not available. Showing basic ATS scoring."
     }
 
     if not client:
@@ -260,7 +260,7 @@ def analyze():
 
         return jsonify({
             "ATS Score":        result["ats_score"],
-        "AI Score": result["ai_score"] if result["ai_score"] > 0 else "Not Available",
+            "AI Score": result["ai_score"] if result["ai_score"] > 0 else "Not Available",
             "Mode":             mode,
             "Matched Skills":   result["matched_keywords"],
             "Missing Keywords": result["missing_keywords"],
