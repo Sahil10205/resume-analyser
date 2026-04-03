@@ -1,4 +1,4 @@
-# 🚀 AI Resume Analyzer — Intelligent ATS Optimization Platform
+# 🚀 HireSense AI – Intelligent Resume Screening Platform
 
 ## 📌 Overview
 
