@@ -270,7 +270,16 @@ def analyze():
         print(f"[Server Error] {e}")
         return jsonify({"error": str(e)}), 500
 
-
+@app.route("/test-gemini", methods=["GET"])
+def test_gemini():
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents="Say hello in one word."
+        )
+        return jsonify({"status": "ok", "response": response.text})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)})
 # ================================================================
 #  9. RUN
 # ================================================================
