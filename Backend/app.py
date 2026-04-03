@@ -1,232 +1,242 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>AI Resume Analyzer Pro</title>
+import os
+import re
+import json
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-<style>
-body {
-    margin: 0;
-    font-family: 'Segoe UI', sans-serif;
-    background: linear-gradient(-45deg, #0f2027, #203a43, #2c5364, #1c1c1c);
-    background-size: 400% 400%;
-    animation: gradientBG 10s ease infinite;
-    color: white;
-}
-@keyframes gradientBG {
-    0% {background-position:0% 50%;}
-    50% {background-position:100% 50%;}
-    100% {background-position:0% 50%;}
-}
-h1 { text-align: center; }
-.container { padding: 20px; }
-.grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-    gap: 20px;
-}
-.glass {
-    background: rgba(255,255,255,0.08);
-    backdrop-filter: blur(15px);
-    padding: 20px;
-    border-radius: 15px;
-}
-textarea { width: 100%; height: 120px; }
-button {
-    width: 100%;
-    padding: 12px;
-    background: linear-gradient(90deg, #00c6ff, #0072ff);
-    border: none;
-    color: white;
-    cursor: pointer;
-    border-radius: 8px;
-}
-.progress-bar { background: rgba(255,255,255,0.2); }
-.progress {
-    height: 25px;
-    width: 0%;
-    text-align: center;
-    font-weight: bold;
-}
-.loader { display:none; text-align:center; }
-.toggle { display:flex; gap:10px; }
-</style>
-</head>
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-<body>
+import fitz  # PyMuPDF
 
-<h1>🚀 AI Resume Analyzer Pro</h1>
+from google import genai
 
-<div class="container">
+# ---------------- APP SETUP ----------------
+app = Flask(__name__)
+CORS(app)
 
-<div class="grid">
+@app.route("/")
+def home():
+    return "Backend is running successfully"
 
-<div class="glass">
-<form id="form">
-<div class="toggle">
-    <label><input type="radio" name="mode" value="fast" checked> ⚡ Fast</label>
-    <label><input type="radio" name="mode" value="ai"> 🧠 AI</label>
-</div>
+# ---------------- GEMINI SETUP ----------------
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+client = None
 
-<br>
+try:
+    if GEMINI_API_KEY:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        print("✅ Gemini client initialized")
+    else:
+        print("❌ GEMINI_API_KEY missing")
+except Exception as e:
+    print("❌ Gemini init error:", e)
+    client = None
 
-<input type="file" id="resume" required><br><br>
-<textarea id="job" placeholder="Paste Job Description"></textarea><br><br>
 
-<button type="submit" id="analyzeBtn">Analyze Resume</button>
-</form>
-</div>
+# ================================================================
+#  1. PDF TEXT EXTRACTION
+# ================================================================
+def extract_text(file) -> str:
+    try:
+        pdf = fitz.open(stream=file.read(), filetype="pdf")
+        return "".join(page.get_text() for page in pdf)
+    except Exception:
+        return file.read().decode(errors="ignore")
 
-<div class="glass">
-<h3>ATS Score</h3>
-<div class="progress-bar">
-<div class="progress" id="progress"></div>
-</div>
-<h4 id="aiScore"></h4>
-</div>
 
-<div class="glass"><h3>Matched Skills</h3><ul id="matched"></ul></div>
-<div class="glass"><h3>Missing Keywords</h3><ul id="keywords"></ul></div>
-<div class="glass"><h3>Suggestions</h3><ul id="suggestions"></ul></div>
-<div class="glass"><h3>🤖 AI Improvements</h3><ul id="improvements"></ul></div>
+# ================================================================
+#  2. TEXT CLEANING
+# ================================================================
+def clean_text(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r"[^a-zA-Z0-9+ ]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
-<div class="glass">
-<h3>📊 Breakdown</h3>
-<canvas id="chart"></canvas>
-</div>
 
-<div class="glass">
-<h3>🕓 History</h3>
-<ul id="history"></ul>
-</div>
+# ================================================================
+#  3. DYNAMIC KEYWORD EXTRACTION
+# ================================================================
+def dynamic_keyword_score(resume: str, job_desc: str):
+    try:
+        vectorizer = TfidfVectorizer(
+            stop_words="english",
+            ngram_range=(1, 2),
+            max_features=500
+        )
+        vectorizer.fit([job_desc])
 
-<div class="glass">
-<button onclick="downloadReport()">📥 Download Report</button>
-</div>
+        feature_names = vectorizer.get_feature_names_out()
+        jd_vector     = vectorizer.transform([job_desc]).toarray()[0]
 
-</div>
+        top_indices  = jd_vector.argsort()[::-1][:30]
+        top_keywords = [feature_names[i] for i in top_indices if jd_vector[i] > 0]
 
-<div class="loader" id="loader">⏳ Analyzing Resume...</div>
+        resume_clean = clean_text(resume)
 
-</div>
+        matched = [kw for kw in top_keywords if kw in resume_clean]
+        missing = [kw for kw in top_keywords if kw not in resume_clean]
 
-<script>
-let lastData = null;
+        score = (len(matched) / len(top_keywords) * 100) if top_keywords else 0
+        return round(score, 2), matched[:15], missing[:15]
 
-// HISTORY
-function saveHistory(score, aiScore) {
-    let history = JSON.parse(localStorage.getItem("history")) || [];
-    history.push({ ats: score, ai: aiScore, time: new Date().toLocaleString() });
-    localStorage.setItem("history", JSON.stringify(history));
-    loadHistory();
-}
-function loadHistory() {
-    let history = JSON.parse(localStorage.getItem("history")) || [];
-    document.getElementById("history").innerHTML =
-        history.map(h => `<li>${h.ats}% | ${h.ai}% (${h.time})</li>`).join("");
-}
-loadHistory();
+    except Exception:
+        return 0.0, [], []
 
-// COLOR
-function getColor(score){
-    if(score>75) return "lime";
-    if(score>50) return "orange";
-    return "red";
+
+# ================================================================
+#  4. TF-IDF COSINE SIMILARITY
+# ================================================================
+def tfidf_score(resume: str, job_desc: str) -> float:
+    try:
+        vectorizer = TfidfVectorizer(stop_words="english")
+        tfidf      = vectorizer.fit_transform([resume, job_desc])
+        return float(cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0] * 100)
+    except Exception:
+        return 0.0
+
+
+# ================================================================
+#  5. SECTION DETECTION
+# ================================================================
+def section_score(resume: str):
+    sections = ["education", "skills", "projects", "experience",
+                "summary", "certifications", "achievements"]
+    resume_lower = resume.lower()
+    found = [s for s in sections if s in resume_lower]
+    score = min(len(found) * 14.3, 100)
+    return round(score, 2), found
+
+
+# ================================================================
+#  6. GEMINI ANALYSIS (SAFE)
+# ================================================================
+GEMINI_PROMPT = """
+You are an expert ATS (Applicant Tracking System) and career coach.
+Analyze the resume against the job description below.
+
+Return ONLY a valid JSON object:
+{
+  "semantic_score": <0-100>,
+  "strengths": [],
+  "improvements": [],
+  "missing_skills": [],
+  "overall_verdict": ""
 }
 
-// FORM
-document.getElementById("form").onsubmit = async (e)=>{
-e.preventDefault();
+--- JOB DESCRIPTION ---
+{job_desc}
 
-let btn=document.getElementById("analyzeBtn");
-btn.disabled=true;
-btn.innerText="Analyzing...";
-document.getElementById("loader").style.display="block";
+--- RESUME ---
+{resume}
+"""
 
-let file=document.getElementById("resume").files[0];
-let job=document.getElementById("job").value;
-let mode=document.querySelector('input[name="mode"]:checked').value;
+def gemini_analysis(resume: str, job_desc: str) -> dict:
+    default = {
+        "semantic_score": 0,
+        "strengths": [],
+        "improvements": ["AI feedback unavailable (quota/API issue)"],
+        "missing_skills": [],
+        "overall_verdict": "AI analysis not available."
+    }
 
-let formData=new FormData();
-formData.append("resume",file);
-formData.append("job_desc",job);
-formData.append("mode",mode);
+    if not client:
+        return default
 
-let res=await fetch("https://resume-analyser-production-93d7.up.railway.app/analyze",{
-method:"POST",
-body:formData
-});
+    try:
+        prompt = GEMINI_PROMPT.format(
+            job_desc=job_desc[:2000],
+            resume=resume[:4000]
+        )
 
-let data=await res.json();
-lastData=data;
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-lite",
+            contents=prompt
+        )
 
-// SCORE
-let score=data["ATS Score"];
-let ai=data["AI Score"];
+        raw = response.text.strip()
+        raw = re.sub(r"^```json\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
 
-let bar=document.getElementById("progress");
-bar.style.width=score+"%";
-bar.style.background=getColor(score);
-bar.innerText=score+"%";
+        result = json.loads(raw)
 
-document.getElementById("aiScore").innerText =
-(ai==="Not Available") ? "🧠 AI: Not Available" : "🧠 AI: "+ai+"%";
+        result["semantic_score"] = max(0, min(int(result.get("semantic_score", 0)), 100))
+        return result
 
-// DATA RENDER FIXES
-document.getElementById("matched").innerHTML =
-(data["Matched Skills"] || []).map(s => `<li>${s}</li>`).join("");
+    except Exception as e:
+        print("Gemini error:", e)
+        return default
 
-document.getElementById("keywords").innerHTML =
-(data["Missing Keywords"] || []).map(s => `<li>${s}</li>`).join("");
 
-document.getElementById("suggestions").innerHTML =
-(data["Suggestions"] || []).map(s => `<li>${s}</li>`).join("");
+# ================================================================
+#  7. FINAL ATS CALCULATION
+# ================================================================
+def calculate_ats(resume: str, job_desc: str, use_ai=True):
+    resume_clean = clean_text(resume)
+    job_clean    = clean_text(job_desc)
 
-// AI improvements fallback
-if (ai === "Not Available") {
-  document.getElementById("improvements").innerHTML =
-  "<li>AI quota exceeded. Showing basic analysis.</li>";
-} else {
-  document.getElementById("improvements").innerHTML =
-  (data["AI Improvements"] || []).map(s=>`<li>${s}</li>`).join("");
-}
+    tfidf = tfidf_score(resume_clean, job_clean)
+    kw_score, matched, missing = dynamic_keyword_score(resume, job_desc)
+    sec_score, sections = section_score(resume)
 
-// CHART FIX
-new Chart(document.getElementById("chart"),{
-type:"bar",
-data:{
-labels:["AI","TF-IDF","Keywords","Sections"],
-datasets:[{
-data:[
-data.Breakdown["AI Semantic"],
-data.Breakdown["TF-IDF"],
-data.Breakdown.Keywords,
-data.Breakdown.Sections
-]
-}]
-}
-});
+    gemini_result = gemini_analysis(resume, job_desc) if use_ai else {}
 
-saveHistory(score,ai);
+    ai_score = gemini_result.get("semantic_score", 0)
 
-document.getElementById("loader").style.display="none";
-btn.disabled=false;
-btn.innerText="Analyze Resume";
-};
+    if use_ai and ai_score > 0:
+        final = 0.4*ai_score + 0.3*kw_score + 0.2*tfidf + 0.1*sec_score
+    else:
+        final = 0.45*kw_score + 0.35*tfidf + 0.2*sec_score
 
-// DOWNLOAD
-function downloadReport(){
-    if(!lastData) return alert("Run analysis first!");
-    let text=JSON.stringify(lastData,null,2);
-    let blob=new Blob([text],{type:"text/plain"});
-    let a=document.createElement("a");
-    a.href=URL.createObjectURL(blob);
-    a.download="report.txt";
-    a.click();
-}
-</script>
+    return {
+        "ATS Score": round(final, 1),
+        "AI Score": ai_score if ai_score > 0 else "Not Available",
+        "Matched Skills": matched,
+        "Missing Keywords": missing,
+        "Suggestions": gemini_result.get("improvements", []),
+        "AI Improvements": gemini_result.get("improvements", []),
+        "Breakdown": {
+            "AI Semantic": ai_score,
+            "TF-IDF": round(tfidf, 1),
+            "Keywords": round(kw_score, 1),
+            "Sections": round(sec_score, 1),
+        }
+    }
 
-</body>
-</html>
+
+# ================================================================
+#  8. MAIN API
+# ================================================================
+@app.route("/analyze", methods=["POST"])
+def analyze():
+    try:
+        file = request.files.get("resume")
+        job_desc = request.form.get("job_desc", "")
+
+        if not file or not job_desc:
+            return jsonify({"error": "Missing resume or job description"}), 400
+
+        mode = request.form.get("mode", "ai")
+        use_ai = (mode == "ai")
+
+        resume_text = extract_text(file)
+
+        if not resume_text.strip():
+            return jsonify({"error": "Empty resume"}), 400
+
+        result = calculate_ats(resume_text, job_desc, use_ai)
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ================================================================
+#  RUN
+# ================================================================
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
