@@ -1,18 +1,11 @@
-import os
-import re
-import json
-
+import os, re, json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-
-import fitz  # PyMuPDF
-
+import fitz
 from google import genai
 
-# ---------------- APP SETUP ----------------
 app = Flask(__name__)
 CORS(app)
 
@@ -20,223 +13,105 @@ CORS(app)
 def home():
     return "Backend is running successfully"
 
-# ---------------- GEMINI SETUP ----------------
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-client = None
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY","")
+client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
-try:
-    if GEMINI_API_KEY:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        print("✅ Gemini client initialized")
-    else:
-        print("❌ GEMINI_API_KEY missing")
-except Exception as e:
-    print("❌ Gemini init error:", e)
-    client = None
-
-
-# ================================================================
-#  1. PDF TEXT EXTRACTION
-# ================================================================
-def extract_text(file) -> str:
+def extract_text(file):
     try:
         pdf = fitz.open(stream=file.read(), filetype="pdf")
-        return "".join(page.get_text() for page in pdf)
-    except Exception:
+        return "".join(p.get_text() for p in pdf)
+    except:
         return file.read().decode(errors="ignore")
 
+def clean_text(t):
+    t=t.lower()
+    t=re.sub(r"[^a-z0-9+ ]"," ",t)
+    return re.sub(r"\s+"," ",t)
 
-# ================================================================
-#  2. TEXT CLEANING
-# ================================================================
-def clean_text(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r"[^a-zA-Z0-9+ ]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-# ================================================================
-#  3. DYNAMIC KEYWORD EXTRACTION
-# ================================================================
-def dynamic_keyword_score(resume: str, job_desc: str):
+def dynamic_keyword_score(resume, jd):
     try:
-        vectorizer = TfidfVectorizer(
-            stop_words="english",
-            ngram_range=(1, 2),
-            max_features=500
-        )
-        vectorizer.fit([job_desc])
+        v=TfidfVectorizer(stop_words="english",ngram_range=(1,2),max_features=500)
+        v.fit([jd])
+        names=v.get_feature_names_out()
+        vec=v.transform([jd]).toarray()[0]
 
-        feature_names = vectorizer.get_feature_names_out()
-        jd_vector     = vectorizer.transform([job_desc]).toarray()[0]
+        top=[names[i] for i in vec.argsort()[::-1][:30] if vec[i]>0]
+        rc=clean_text(resume)
 
-        top_indices  = jd_vector.argsort()[::-1][:30]
-        top_keywords = [feature_names[i] for i in top_indices if jd_vector[i] > 0]
+        matched=[]
+        for kw in top:
+            if all(w in rc for w in kw.split()):
+                matched.append(kw)
 
-        resume_clean = clean_text(resume)
+        missing=[k for k in top if k not in matched]
+        score=(len(matched)/len(top)*100) if top else 0
+        return round(score,2),matched[:15],missing[:15]
+    except:
+        return 0,[],[]
 
-        matched = [kw for kw in top_keywords if kw in resume_clean]
-        missing = [kw for kw in top_keywords if kw not in resume_clean]
-
-        score = (len(matched) / len(top_keywords) * 100) if top_keywords else 0
-        return round(score, 2), matched[:15], missing[:15]
-
-    except Exception:
-        return 0.0, [], []
-
-
-# ================================================================
-#  4. TF-IDF COSINE SIMILARITY
-# ================================================================
-def tfidf_score(resume: str, job_desc: str) -> float:
+def tfidf_score(r,j):
     try:
-        vectorizer = TfidfVectorizer(stop_words="english")
-        tfidf      = vectorizer.fit_transform([resume, job_desc])
-        return float(cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0] * 100)
-    except Exception:
-        return 0.0
+        v=TfidfVectorizer(stop_words="english")
+        tf=v.fit_transform([r,j])
+        return cosine_similarity(tf[0:1],tf[1:2])[0][0]*100
+    except:
+        return 0
 
+def section_score(r):
+    sec=["education","skills","projects","experience"]
+    f=[s for s in sec if s in r.lower()]
+    return min(len(f)*25,100),f
 
-# ================================================================
-#  5. SECTION DETECTION
-# ================================================================
-def section_score(resume: str):
-    sections = ["education", "skills", "projects", "experience",
-                "summary", "certifications", "achievements"]
-    resume_lower = resume.lower()
-    found = [s for s in sections if s in resume_lower]
-    score = min(len(found) * 14.3, 100)
-    return round(score, 2), found
-
-
-# ================================================================
-#  6. GEMINI ANALYSIS (SAFE)
-# ================================================================
-GEMINI_PROMPT = """
-You are an expert ATS (Applicant Tracking System) and career coach.
-Analyze the resume against the job description below.
-
-Return ONLY a valid JSON object:
-{
-  "semantic_score": <0-100>,
-  "strengths": [],
-  "improvements": [],
-  "missing_skills": [],
-  "overall_verdict": ""
-}
-
---- JOB DESCRIPTION ---
-{job_desc}
-
---- RESUME ---
-{resume}
-"""
-
-def gemini_analysis(resume: str, job_desc: str) -> dict:
-    default = {
-        "semantic_score": 0,
-        "strengths": [],
-        "improvements": ["AI feedback unavailable (quota/API issue)"],
-        "missing_skills": [],
-        "overall_verdict": "AI analysis not available."
-    }
-
+def gemini_analysis(r,j):
     if not client:
-        return default
+        return {"semantic_score":0,"improvements":["AI not available"]}
 
     try:
-        prompt = GEMINI_PROMPT.format(
-            job_desc=job_desc[:2000],
-            resume=resume[:4000]
-        )
+        prompt=f"Score resume vs job (0-100). Return JSON with semantic_score and improvements.\nJD:{j[:2000]}\nRES:{r[:4000]}"
+        res=client.models.generate_content(model="gemini-2.0-flash-lite",contents=prompt)
+        return json.loads(res.text)
+    except:
+        return {"semantic_score":0,"improvements":["AI failed"]}
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash-lite",
-            contents=prompt
-        )
+def calculate_ats(r,j,use_ai=True):
+    rc, jc = clean_text(r), clean_text(j)
 
-        raw = response.text.strip()
-        raw = re.sub(r"^```json\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
+    tf=tfidf_score(rc,jc)
+    kw,match,miss=dynamic_keyword_score(r,j)
+    sec,found=section_score(r)
 
-        result = json.loads(raw)
+    g=gemini_analysis(r,j) if use_ai else {}
+    ai=g.get("semantic_score",0)
 
-        result["semantic_score"] = max(0, min(int(result.get("semantic_score", 0)), 100))
-        return result
-
-    except Exception as e:
-        print("Gemini error:", e)
-        return default
-
-
-# ================================================================
-#  7. FINAL ATS CALCULATION
-# ================================================================
-def calculate_ats(resume: str, job_desc: str, use_ai=True):
-    resume_clean = clean_text(resume)
-    job_clean    = clean_text(job_desc)
-
-    tfidf = tfidf_score(resume_clean, job_clean)
-    kw_score, matched, missing = dynamic_keyword_score(resume, job_desc)
-    sec_score, sections = section_score(resume)
-
-    gemini_result = gemini_analysis(resume, job_desc) if use_ai else {}
-
-    ai_score = gemini_result.get("semantic_score", 0)
-
-    if use_ai and ai_score > 0:
-        final = 0.4*ai_score + 0.3*kw_score + 0.2*tfidf + 0.1*sec_score
-    else:
-        final = 0.45*kw_score + 0.35*tfidf + 0.2*sec_score
+    final=(0.4*ai+0.3*kw+0.2*tf+0.1*sec) if ai>0 else (0.45*kw+0.35*tf+0.2*sec)
 
     return {
-        "ATS Score": round(final, 1),
-        "AI Score": ai_score if ai_score > 0 else "Not Available",
-        "Matched Skills": matched,
-        "Missing Keywords": missing,
-        "Suggestions": gemini_result.get("improvements", []),
-        "AI Improvements": gemini_result.get("improvements", []),
-        "Breakdown": {
-            "AI Semantic": ai_score,
-            "TF-IDF": round(tfidf, 1),
-            "Keywords": round(kw_score, 1),
-            "Sections": round(sec_score, 1),
+        "ATS Score":round(final,1),
+        "AI Score":ai if ai>0 else "Not Available",
+        "Matched Skills":match,
+        "Missing Keywords":miss,
+        "Suggestions":g.get("improvements",[]),
+        "AI Improvements":g.get("improvements",[]),
+        "Breakdown":{
+            "AI Semantic":ai,
+            "TF-IDF":round(tf,1),
+            "Keywords":round(kw,1),
+            "Sections":round(sec,1)
         }
     }
 
-
-# ================================================================
-#  8. MAIN API
-# ================================================================
-@app.route("/analyze", methods=["POST"])
+@app.route("/analyze",methods=["POST"])
 def analyze():
-    try:
-        file = request.files.get("resume")
-        job_desc = request.form.get("job_desc", "")
+    f=request.files.get("resume")
+    jd=request.form.get("job_desc","")
 
-        if not file or not job_desc:
-            return jsonify({"error": "Missing resume or job description"}), 400
+    if not f or not jd:
+        return jsonify({"error":"missing data"}),400
 
-        mode = request.form.get("mode", "ai")
-        use_ai = (mode == "ai")
+    text=extract_text(f)
+    res=calculate_ats(text,jd,request.form.get("mode")=="ai")
 
-        resume_text = extract_text(file)
+    return jsonify(res)
 
-        if not resume_text.strip():
-            return jsonify({"error": "Empty resume"}), 400
-
-        result = calculate_ats(resume_text, job_desc, use_ai)
-
-        return jsonify(result)
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ================================================================
-#  RUN
-# ================================================================
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+if __name__=="__main__":
+    app.run(host="0.0.0.0",port=int(os.environ.get("PORT",10000)))
