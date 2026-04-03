@@ -138,7 +138,7 @@ def gemini_analysis(resume: str, job_desc: str) -> dict:
 
         prompt   = GEMINI_PROMPT.format(job_desc=jd_trimmed, resume=resume_trimmed)
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash-lite",
             contents=prompt
         )
 
@@ -275,7 +275,7 @@ def analyze():
 def test_gemini():
     try:
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.0-flash-lite",
             contents="Say hello in one word."
         )
         return jsonify({"status": "ok", "response": response.text})
