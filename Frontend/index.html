@@ -87,14 +87,13 @@ button {
 <h4 id="aiScore"></h4>
 </div>
 
-<div class="glass"><h3>Matched Skills</h3><div id="matched"></div></div>
-<div class="glass"><h3>Missing Keywords</h3><div id="keywords"></div></div>
+<div class="glass"><h3>Matched Skills</h3><ul id="matched"></ul></div>
+<div class="glass"><h3>Missing Keywords</h3><ul id="keywords"></ul></div>
 <div class="glass"><h3>Suggestions</h3><ul id="suggestions"></ul></div>
 <div class="glass"><h3>🤖 AI Improvements</h3><ul id="improvements"></ul></div>
 
 <div class="glass">
 <h3>📊 Breakdown</h3>
-<p id="breakdown"></p>
 <canvas id="chart"></canvas>
 </div>
 
@@ -123,7 +122,6 @@ function saveHistory(score, aiScore) {
     localStorage.setItem("history", JSON.stringify(history));
     loadHistory();
 }
-
 function loadHistory() {
     let history = JSON.parse(localStorage.getItem("history")) || [];
     document.getElementById("history").innerHTML =
@@ -164,6 +162,7 @@ body:formData
 let data=await res.json();
 lastData=data;
 
+// SCORE
 let score=data["ATS Score"];
 let ai=data["AI Score"];
 
@@ -175,16 +174,33 @@ bar.innerText=score+"%";
 document.getElementById("aiScore").innerText =
 (ai==="Not Available") ? "🧠 AI: Not Available" : "🧠 AI: "+ai+"%";
 
-document.getElementById("improvements").innerHTML=
-data["AI Improvements"].map(s=>`<li>${s}</li>`).join("");
+// DATA RENDER FIXES
+document.getElementById("matched").innerHTML =
+(data["Matched Skills"] || []).map(s => `<li>${s}</li>`).join("");
 
+document.getElementById("keywords").innerHTML =
+(data["Missing Keywords"] || []).map(s => `<li>${s}</li>`).join("");
+
+document.getElementById("suggestions").innerHTML =
+(data["Suggestions"] || []).map(s => `<li>${s}</li>`).join("");
+
+// AI improvements fallback
+if (ai === "Not Available") {
+  document.getElementById("improvements").innerHTML =
+  "<li>AI quota exceeded. Showing basic analysis.</li>";
+} else {
+  document.getElementById("improvements").innerHTML =
+  (data["AI Improvements"] || []).map(s=>`<li>${s}</li>`).join("");
+}
+
+// CHART FIX
 new Chart(document.getElementById("chart"),{
 type:"bar",
 data:{
 labels:["AI","TF-IDF","Keywords","Sections"],
 datasets:[{
 data:[
-data.Breakdown.AI,
+data.Breakdown["AI Semantic"],
 data.Breakdown["TF-IDF"],
 data.Breakdown.Keywords,
 data.Breakdown.Sections
